@@ -332,6 +332,13 @@ function validate() {
       if (!item.label && section.type === 'additional') return;
       if (!item.condition) errors.push(label + ' — Condition required');
       if (!item.priority) errors.push(label + ' — Priority required');
+      // Photo requirements
+      var isOverview = item.label && item.label.toLowerCase().includes('overview');
+      var minPhotos = isOverview ? 4 : 2;
+      var photoCount = (item.photos || []).length;
+      if (photoCount < minPhotos) {
+        errors.push(label + ' — Minimum ' + minPhotos + ' photo(s) required (' + photoCount + ' uploaded)');
+      }
     }
     if (section.type === 'multiroom') {
       section.rooms.forEach(function(room) {
