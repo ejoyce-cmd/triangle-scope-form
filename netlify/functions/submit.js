@@ -175,16 +175,25 @@ async function createCCProject(address) {
 
 async function uploadPhotoToCC(projectId, photoData, photoName, tag) {
   try {
-    const base64Data = photoData.split(',')[1];
+    const parts = photoData.split(',');
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const ext = mimeType.split('/')[1] || 'jpg';
+    const safeName = 'photo_' + Date.now() + '.' + ext;
+    const base64Data = parts[1];
     const imgBuffer = Buffer.from(base64Data, 'base64');
     const boundary = '----CCBound' + Date.now() + Math.random().toString(36).substr(2,5);
-    const part1 = Buffer.from('--' + boundary + '\r\nContent-Disposition: form-data; name="photo[image]"; filename="' + photoName + '"\r\nContent-Type: image/jpeg\r\n\r\n');
-    const part2 = Buffer.from('\r\n--' + boundary + '\r\nContent-Disposition: form-data; name="photo[label]"\r\n\r\n' + tag + '\r\n--' + boundary + '--\r\n');
+    const part1 = Buffer.from('--' + boundary + '\r\nContent-Disposition: form-data; name="photo[image]"; filename="' + safeName + '"\r\nContent-Type: ' + mimeType + '\r\n\r\n');
+    const part2 = Buffer.from('\r\n--' + boundary + '--\r\n');
     const body = Buffer.concat([part1, imgBuffer, part2]);
     const res = await httpsPost('api.companycam.com', '/v2/projects/' + projectId + '/photos',
       { 'Authorization': 'Bearer ' + CC_TOKEN, 'Content-Type': 'multipart/form-data; boundary=' + boundary }, body);
+    console.log('CC photo upload status:', res.status, 'mime:', mimeType, 'size:', imgBuffer.length);
+    if (res.status !== 200 && res.status !== 201) {
+      console.log('CC photo error response:', JSON.stringify(res.data).substring(0, 200));
+    }
     return res.status === 200 || res.status === 201;
-  } catch(e) { return false; }
+  } catch(e) { console.log('CC photo exception:', e.message); return false; }
 }
 
 exports.handler = async function(event) {
@@ -245,10 +254,12 @@ exports.handler = async function(event) {
       try {
         const pdfBuffer = generatePDF(address, tech, sections);
         const filename = address.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40) + '_Scope.pdf';
+        console.log('Uploading PDF, size:', pdfBuffer.length, 'itemId:', itemId);
         const pdfRes = await uploadPDFToMonday(itemId, pdfBuffer, filename);
+        console.log('PDF upload status:', pdfRes.status, 'response:', JSON.stringify(pdfRes.data).substring(0,200));
         if (pdfRes.status === 200 || (pdfRes.data && pdfRes.data.data)) results.pdf = true;
-        else results.errors.push('PDF: ' + JSON.stringify(pdfRes.data).substring(0,100));
-      } catch(e) { results.errors.push('PDF: ' + e.message); }
+        else results.errors.push('PDF: ' + JSON.stringify(pdfRes.data).substring(0,200));
+      } catch(e) { results.errors.push('PDF: ' + e.message); console.log('PDF exception:', e.message); }
     }
 
     // CompanyCam — create project then upload photos
