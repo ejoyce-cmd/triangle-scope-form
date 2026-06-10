@@ -232,6 +232,8 @@ exports.handler = async function(event) {
       else if (t.includes('status')) colMap.status = col.id;
     });
 
+    console.log('All columns:', JSON.stringify(cols.map(function(c){return {id:c.id,title:c.title,type:c.type};})));
+    console.log('Column map:', JSON.stringify(colMap));
     const today = new Date().toISOString().split('T')[0];
     const colVals = {};
     if (colMap.address) colVals[colMap.address] = address;
@@ -244,7 +246,9 @@ exports.handler = async function(event) {
     const createRes = await mondayRequest(
       `mutation { create_item(board_id: ${MONDAY_BOARD}, item_name: "${cleanAddr}", column_values: ${JSON.stringify(JSON.stringify(colVals))}) { id } }`
     );
+    console.log('Create item result:', JSON.stringify(createRes).substring(0,200));
     const itemId = createRes.data && createRes.data.create_item && createRes.data.create_item.id;
+    console.log('Item ID:', itemId);
 
     if (itemId) {
       results.monday = true;
