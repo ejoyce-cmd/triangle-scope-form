@@ -448,6 +448,62 @@ function buildReport(address, tech) {
   return { text: lines.join('\n'), grandTotal, photoCount };
 }
 
+
+var CC_TOKEN = 'Jc3Lv6lQBoSSCOK1uL17qwDDIAe-lX99LMkW_uwc5cU';
+
+async function submitToCompanyCam(address) {
+  try {
+    var ccRes = await fetch('https://api.companycam.com/v2/projects', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + CC_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: { name: address, status: 'active' } })
+    });
+    var ccData = await ccRes.json();
+    var projectId = ccData.id;
+    if (!projectId) return { ok: false, photos: 0 };
+
+    var allPhotos = [];
+    state.forEach(function(section) {
+      if (section.type === 'multiroom') {
+        section.rooms.forEach(function(room) {
+          room.items.forEach(function(item) {
+            (item.photos || []).forEach(function(p) {
+              allPhotos.push({ data: p.data, name: p.name, tag: section.title + ' - ' + room.name + ' - ' + item.label });
+            });
+          });
+        });
+      } else {
+        (section.items || []).forEach(function(item) {
+          (item.photos || []).forEach(function(p) {
+            allPhotos.push({ data: p.data, name: p.name, tag: section.title + ' - ' + item.label });
+          });
+        });
+      }
+    });
+
+    var uploaded = 0;
+    for (var i = 0; i < allPhotos.length; i++) {
+      try {
+        var photo = allPhotos[i];
+        var arr = photo.data.split(','); var mime = arr[0].match(/:(.*?);/)[1];
+        var bstr = atob(arr[1]); var n = bstr.length; var u8 = new Uint8Array(n);
+        while(n--){ u8[n] = bstr.charCodeAt(n); }
+        var blob = new Blob([u8], { type: mime });
+        var fd = new FormData();
+        fd.append('photo[image]', blob, photo.name || 'photo.jpg');
+        fd.append('photo[label]', photo.tag);
+        var r = await fetch('https://api.companycam.com/v2/projects/' + projectId + '/photos', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + CC_TOKEN },
+          body: fd
+        });
+        if (r.ok) uploaded++;
+      } catch(e) {}
+    }
+    return { ok: true, photos: uploaded };
+  } catch(e) { return { ok: false, photos: 0 }; }
+}
+
 document.getElementById('submitBtn').onclick = async function() {
   state.forEach(function(s){ s.collapsed = false; }); render();
   var errors = validate();
@@ -475,10 +531,31 @@ document.getElementById('submitBtn').onclick = async function() {
   var report = buildReport(address, tech);
 
   try {
+    // Handle CompanyCam directly from browser (was already working)
+    prog.textContent = '⏳ Uploading photos to CompanyCam...';
+    var ccResult = await submitToCompanyCam(address);
+
+    // Strip photo data before sending to function (too large)
+    prog.textContent = '⏳ Submitting to Monday.com...';
+    var sectionsNoPhotos = state.map(function(section) {
+      var s = JSON.parse(JSON.stringify(section));
+      function stripPhotos(items) {
+        return items.map(function(item) {
+          return { label: item.label, condition: item.condition, priority: item.priority, cost: item.cost, comments: item.comments, photoCount: (item.photos || []).length };
+        });
+      }
+      if (s.type === 'multiroom') {
+        s.rooms = s.rooms.map(function(room) { return { name: room.name, items: stripPhotos(room.items) }; });
+      } else {
+        s.items = stripPhotos(s.items || []);
+      }
+      return s;
+    });
+
     var res = await fetch('/.netlify/functions/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address, tech, reportText: report.text, grandTotal: report.grandTotal, sections: state })
+      body: JSON.stringify({ address, tech, reportText: report.text, grandTotal: report.grandTotal, sections: sectionsNoPhotos })
     });
     var data = await res.json();
     prog.style.display = 'none';
@@ -490,8 +567,8 @@ document.getElementById('submitBtn').onclick = async function() {
       banner.innerHTML = '✅ Scope submitted successfully!<br>' +
         (r.monday ? '✓ Monday.com updated. ' : '⚠ Monday.com issue. ') +
         (r.pdf ? '✓ PDF attached. ' : '⚠ PDF issue. ') +
-        (r.companycam ? '✓ CompanyCam project created. ' : '⚠ CompanyCam issue. ') +
-        (r.photos > 0 ? '✓ ' + r.photos + ' photo(s) uploaded with tags.' : '') +
+        (ccResult.ok ? '✓ CompanyCam project created. ' : '⚠ CompanyCam: check connection. ') +
+        (ccResult.photos > 0 ? '✓ ' + ccResult.photos + ' photo(s) uploaded with tags.' : '') +
         (r.errors && r.errors.length > 0 ? '<br><small>Debug: ' + r.errors.join(' | ') + '</small>' : '');
 
       // Clear saved state on successful submit
