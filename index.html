@@ -474,8 +474,7 @@ document.getElementById('submitBtn').onclick = async function() {
   var tech = document.getElementById('techName').value.trim();
   var report = buildReport(address, tech);
 
-  try {
-      // Collect all photos with tags
+  // Collect all photos with tags
   var allPhotos = [];
   state.forEach(function(section) {
     if (section.type === 'multiroom') {
