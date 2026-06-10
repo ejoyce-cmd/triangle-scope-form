@@ -157,7 +157,7 @@ function generatePDF(address, tech, sections) {
 async function uploadPDFToMonday(itemId, pdfBuffer, filename) {
   try {
     const boundary = '----MondayFile' + Date.now();
-    const query = 'mutation ($file: File!) { add_file_to_column(item_id: ' + itemId + ', column_id: "generated_report", file: $file) { id } }';
+    const query = 'mutation ($file: File!) { add_file_to_column(item_id: ' + itemId + ', column_id: "file_mm45vgcy", file: $file) { id } }';
     const headerPart = '--' + boundary + '\r\nContent-Disposition: form-data; name="query"\r\n\r\n' + query + '\r\n';
     const filePart = '--' + boundary + '\r\nContent-Disposition: form-data; name="variables[file]"; filename="' + filename + '"\r\nContent-Type: application/pdf\r\n\r\n';
     const footer = '\r\n--' + boundary + '--\r\n';
